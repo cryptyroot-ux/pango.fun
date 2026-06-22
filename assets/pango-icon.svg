@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pango">
+  <defs>
+    <radialGradient id="g" cx="34%" cy="24%" r="74%">
+      <stop offset="0" stop-color="#fff8ee"/>
+      <stop offset="0.22" stop-color="#ffd08a"/>
+      <stop offset="0.52" stop-color="#ff8a3d"/>
+      <stop offset="1" stop-color="#100804"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="#060403"/>
+  <circle cx="256" cy="256" r="188" fill="url(#g)" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#fff8ee" stroke-opacity="0.28" stroke-width="10"/>
+  <path d="M178 365V145h91c54 0 91 35 91 83 0 49-37 84-91 84h-36v53h-55Zm55-101h30c27 0 43-14 43-36s-16-36-43-36h-30v72Z" fill="#2a1304"/>
+  <path d="M119 388c74 50 199 59 274-6" fill="none" stroke="#ffd08a" stroke-width="10" stroke-linecap="round" opacity="0.9"/>
+</svg>

@@ -1,0 +1,34 @@
+{
+  "name": "Pango-OS Hermes Console",
+  "short_name": "Pango",
+  "description": "Authenticated Pango/Hermes operator console for chat, ops, Kanban, rollback, and monitoring.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#060403",
+  "theme_color": "#ffb86b",
+  "categories": ["productivity", "utilities", "developer"],
+  "icons": [
+    {
+      "src": "/assets/pango-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chat",
+      "short_name": "Chat",
+      "url": "/#chat",
+      "icons": [{"src": "/assets/pango-icon.svg", "sizes": "any", "type": "image/svg+xml"}]
+    },
+    {
+      "name": "Observe",
+      "short_name": "Observe",
+      "url": "/#observe",
+      "icons": [{"src": "/assets/pango-icon.svg", "sizes": "any", "type": "image/svg+xml"}]
+    }
+  ]
+}
