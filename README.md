@@ -9,6 +9,35 @@ Static source bundle for the live `https://pango.fun` operator console.
 - `manifest.webmanifest` - PWA manifest.
 - `sw.js` - service worker.
 - `assets/pango-icon.svg` - PWA/icon asset.
+- `dev-server.mjs` - local-only mock auth/API server for development.
+
+## Local development
+
+Do not open `index.html` directly. The app expects same-origin server routes
+under `/api/pango/*`, so a plain static server will make login fail.
+
+Run the local mock server:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:4173
+```
+
+By default, local development accepts any non-empty username and password.
+To require a specific local credential, set:
+
+```bash
+PANGO_LOCAL_USER=operator PANGO_LOCAL_PASSWORD=local-password npm run dev
+```
+
+The local server is a mock. It provides cookie auth, CSRF, status, sessions,
+chat streaming, tasks, config, approvals, and snapshot endpoints with in-memory
+data only. It does not connect to the production Hermes gateway.
 
 ## Backend contract
 
