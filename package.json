@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node dev-server.mjs"
+    "dev": "node dev-server.mjs",
+    "dev:mock": "node dev-server.mjs",
+    "dev:prod": "PANGO_API_UPSTREAM=https://pango.fun node dev-server.mjs"
   }
 }

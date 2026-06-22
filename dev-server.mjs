@@ -1,12 +1,14 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 const root = resolve(new URL('.', import.meta.url).pathname);
 const host = process.env.HOST || '127.0.0.1';
 const port = Number(process.env.PORT || 4173);
+const apiUpstream = process.env.PANGO_API_UPSTREAM ? new URL(process.env.PANGO_API_UPSTREAM) : null;
+const apiMode = apiUpstream ? 'proxy' : 'mock';
 const configuredUser = process.env.PANGO_LOCAL_USER;
 const configuredPassword = process.env.PANGO_LOCAL_PASSWORD;
 const startedAt = Date.now();
@@ -109,16 +111,18 @@ function currentSession(req) {
   if (!sid) return null;
   const session = sessions.get(sid);
   if (!session) return null;
+  session.sid = sid;
   session.lastSeen = Date.now();
-  return { sid, ...session };
+  return session;
 }
 
-function makeSession(username) {
+function makeSession(username, extra = {}) {
   const sid = randomUUID();
-  const csrf = randomUUID();
+  const csrf = extra.csrf || randomUUID();
   sessions.set(sid, {
     username,
     csrf,
+    ...extra,
     createdAt: Date.now(),
     lastSeen: Date.now(),
   });
@@ -129,11 +133,14 @@ function sessionCookie(sid, maxAge = 28800) {
   return `${cookieName}=${encodeURIComponent(sid)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 
-async function readBody(req) {
+async function readRawBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
-  if (!chunks.length) return {};
-  const raw = Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function readBody(req) {
+  const raw = await readRawBody(req);
   if (!raw.trim()) return {};
   try {
     return JSON.parse(raw);
@@ -306,7 +313,208 @@ function delay(ms) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 }
 
+function upstreamUrlFor(url) {
+  if (!apiUpstream) throw new Error('missing_upstream');
+  return new URL(`${url.pathname}${url.search}`, apiUpstream).toString();
+}
+
+function getSetCookies(headers) {
+  if (typeof headers.getSetCookie === 'function') return headers.getSetCookie();
+  const value = headers.get('set-cookie');
+  return value ? [value] : [];
+}
+
+function cookieHeaderFromSetCookies(setCookies) {
+  return setCookies
+    .map((cookie) => String(cookie).split(';')[0].trim())
+    .filter(Boolean)
+    .join('; ');
+}
+
+function mergeCookieHeader(currentCookie, setCookies) {
+  const jar = new Map();
+  String(currentCookie || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const index = part.indexOf('=');
+      if (index !== -1) jar.set(part.slice(0, index), part.slice(index + 1));
+    });
+  cookieHeaderFromSetCookies(setCookies)
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const index = part.indexOf('=');
+      if (index !== -1) jar.set(part.slice(0, index), part.slice(index + 1));
+    });
+  return Array.from(jar.entries())
+    .map(([key, value]) => `${key}=${value}`)
+    .join('; ');
+}
+
+function proxyResponseHeaders(upstreamRes, extra = {}) {
+  const headers = {
+    'cache-control': upstreamRes.headers.get('cache-control') || 'no-store',
+    ...extra,
+  };
+  const contentType = upstreamRes.headers.get('content-type');
+  if (contentType) headers['content-type'] = contentType;
+  return headers;
+}
+
+function proxyRequestHeaders(req, session, hasBody) {
+  const headers = {
+    accept: req.headers.accept || '*/*',
+    'user-agent': 'pango.fun-local-dev-proxy',
+  };
+  if (hasBody && req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
+  if (session?.upstreamCookie) headers.cookie = session.upstreamCookie;
+  if (session?.upstreamCsrf || session?.csrf) headers['x-pango-csrf'] = session.upstreamCsrf || session.csrf;
+  return headers;
+}
+
+async function sendUpstreamBody(upstreamRes, res) {
+  if (!upstreamRes.body) {
+    res.end();
+    return;
+  }
+  for await (const chunk of upstreamRes.body) res.write(chunk);
+  res.end();
+}
+
+async function fetchUpstreamMe(session) {
+  const upstreamRes = await fetch(new URL('/api/pango/me', apiUpstream), {
+    method: 'GET',
+    headers: proxyRequestHeaders({ headers: {} }, session, false),
+  });
+  const text = await upstreamRes.text();
+  let data = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = {};
+  }
+  const setCookies = getSetCookies(upstreamRes.headers);
+  if (setCookies.length) session.upstreamCookie = mergeCookieHeader(session.upstreamCookie, setCookies);
+  if (data.csrf) {
+    session.upstreamCsrf = data.csrf;
+    session.csrf = data.csrf;
+  }
+  return { upstreamRes, data, text };
+}
+
+async function handleProxyApi(req, res, url) {
+  const { pathname } = url;
+
+  if (pathname === '/api/pango/login' && req.method === 'POST') {
+    const rawBody = await readRawBody(req);
+    const upstreamRes = await fetch(upstreamUrlFor(url), {
+      method: 'POST',
+      headers: {
+        'content-type': req.headers['content-type'] || 'application/json',
+        accept: 'application/json',
+        'user-agent': 'pango.fun-local-dev-proxy',
+      },
+      body: rawBody,
+    });
+    const text = await upstreamRes.text();
+    const setCookies = getSetCookies(upstreamRes.headers);
+    const upstreamCookie = cookieHeaderFromSetCookies(setCookies);
+
+    if (!upstreamRes.ok) {
+      res.writeHead(upstreamRes.status, proxyResponseHeaders(upstreamRes));
+      res.end(text);
+      return;
+    }
+
+    let data = {};
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {};
+    }
+    const username = (() => {
+      try {
+        return JSON.parse(rawBody).username || data.user?.username || 'production-user';
+      } catch {
+        return data.user?.username || 'production-user';
+      }
+    })();
+    const session = makeSession(username, {
+      csrf: data.csrf || randomUUID(),
+      upstreamCookie,
+      upstreamCsrf: data.csrf || '',
+      mode: 'proxy',
+    });
+
+    if (!session.upstreamCsrf && session.upstreamCookie) {
+      await fetchUpstreamMe(sessions.get(session.sid));
+    }
+
+    const body = JSON.stringify({
+      ...data,
+      ok: data.ok !== false,
+      csrf: sessions.get(session.sid)?.csrf || session.csrf,
+      mode: 'production-proxy',
+    });
+    res.writeHead(200, {
+      ...proxyResponseHeaders(upstreamRes, { 'content-type': 'application/json; charset=utf-8' }),
+      'set-cookie': sessionCookie(session.sid),
+    });
+    res.end(body);
+    return;
+  }
+
+  const session = requireAuth(req, res);
+  if (!session) return;
+
+  if (pathname === '/api/pango/me' && req.method === 'GET') {
+    const { upstreamRes, data, text } = await fetchUpstreamMe(session);
+    res.writeHead(upstreamRes.status, proxyResponseHeaders(upstreamRes, { 'content-type': 'application/json; charset=utf-8' }));
+    if (upstreamRes.ok) {
+      res.end(JSON.stringify({ ...data, csrf: session.csrf, mode: 'production-proxy' }));
+    } else {
+      res.end(text);
+    }
+    return;
+  }
+
+  if (pathname === '/api/pango/logout' && req.method === 'POST') {
+    if (checkCsrf(req, session)) {
+      await fetch(upstreamUrlFor(url), {
+        method: 'POST',
+        headers: proxyRequestHeaders(req, session, false),
+      }).catch(() => null);
+    }
+    sessions.delete(session.sid);
+    sendJson(res, 200, { ok: true }, { 'set-cookie': sessionCookie('', 0) });
+    return;
+  }
+
+  const hasBody = !['GET', 'HEAD'].includes(req.method || 'GET');
+  if (hasBody && !requireCsrf(req, res, session)) return;
+  const rawBody = hasBody ? await readRawBody(req) : undefined;
+  const upstreamRes = await fetch(upstreamUrlFor(url), {
+    method: req.method,
+    headers: proxyRequestHeaders(req, session, hasBody),
+    body: rawBody,
+  });
+
+  const setCookies = getSetCookies(upstreamRes.headers);
+  if (setCookies.length) session.upstreamCookie = mergeCookieHeader(session.upstreamCookie, setCookies);
+
+  res.writeHead(upstreamRes.status, proxyResponseHeaders(upstreamRes));
+  await sendUpstreamBody(upstreamRes, res);
+}
+
 async function handleApi(req, res, url) {
+  if (apiMode === 'proxy') {
+    await handleProxyApi(req, res, url);
+    return;
+  }
+
   const { pathname, searchParams } = url;
 
   if (pathname === '/api/pango/login' && req.method === 'POST') {
@@ -543,9 +751,14 @@ const server = createServer(async (req, res) => {
 
 server.listen(port, host, () => {
   console.log(`pango.fun local dev server running at http://${host}:${port}`);
-  if (configuredUser || configuredPassword) {
+  if (apiUpstream) {
+    console.log(`api mode: production proxy -> ${apiUpstream.origin}`);
+    console.log('local auth: credentials are forwarded to upstream; upstream cookies stay in memory');
+  } else if (configuredUser || configuredPassword) {
+    console.log('api mode: local mock');
     console.log('local auth: using PANGO_LOCAL_USER/PANGO_LOCAL_PASSWORD');
   } else {
+    console.log('api mode: local mock');
     console.log('local auth: any non-empty username/password is accepted');
   }
 });

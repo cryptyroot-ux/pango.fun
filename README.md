@@ -39,6 +39,35 @@ The local server is a mock. It provides cookie auth, CSRF, status, sessions,
 chat streaming, tasks, config, approvals, and snapshot endpoints with in-memory
 data only. It does not connect to the production Hermes gateway.
 
+## Local UI with production VPS responses
+
+To run the local UI while using the production pango.fun API/Hermes bridge:
+
+```bash
+npm run dev:prod
+```
+
+Open:
+
+```text
+http://127.0.0.1:4173
+```
+
+Log in with the same operator credential used on `https://pango.fun`. The local
+server forwards `/api/pango/*` to `https://pango.fun`, keeps the production
+cookie in memory only, and gives the browser a separate local HttpOnly cookie.
+This makes chat/status/session/task responses come from the VPS while the static
+files are served from your local checkout.
+
+Equivalent explicit command:
+
+```bash
+PANGO_API_UPSTREAM=https://pango.fun npm run dev
+```
+
+Use this mode only on a trusted machine. It performs real authenticated
+production requests, so write actions still hit the VPS.
+
 ## Backend contract
 
 This repository contains only browser-facing static files. Runtime routes such as
