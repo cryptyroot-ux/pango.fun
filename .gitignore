@@ -12,10 +12,13 @@ id_rsa
 id_ed25519
 
 node_modules/
+android/
+ios/
 dist/
 build/
 .cache/
 .vite/
+.expo/
 
 *.log
 logs/

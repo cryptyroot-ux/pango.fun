@@ -3,9 +3,34 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "expo/AppEntry",
   "scripts": {
-    "dev": "node dev-server.mjs",
-    "dev:mock": "node dev-server.mjs",
-    "dev:prod": "PANGO_API_UPSTREAM=https://pango.fun node dev-server.mjs"
+    "start": "expo start --port 8082",
+    "start:clear": "expo start --clear --port 8082",
+    "start:tunnel": "expo start --tunnel --port 8082",
+    "dev": "expo start --port 8082",
+    "android": "expo start --android --port 8082",
+    "android:tunnel": "expo start --android --tunnel --port 8082",
+    "android:devbuild": "expo run:android --port 8082",
+    "web": "expo start --web --port 8082",
+    "web:prod": "EXPO_PUBLIC_PANGO_API_BASE=http://127.0.0.1:4173 expo start --web --port 8082",
+    "export:web": "expo export --platform web",
+    "api:mock": "node dev-server.mjs",
+    "api:prod": "PANGO_API_UPSTREAM=https://pango.fun node dev-server.mjs",
+    "dev:mock": "npm run api:mock",
+    "dev:prod": "npm run api:prod"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~55.0.11",
+    "expo": "~55.0.0",
+    "expo-constants": "~55.0.16",
+    "expo-speech-recognition": "^3.1.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "^0.83.6",
+    "react-native-web": "~0.21.0"
+  },
+  "devDependencies": {
+    "babel-preset-expo": "~55.0.0"
   }
 }

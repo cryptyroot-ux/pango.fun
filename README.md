@@ -1,79 +1,148 @@
 # pango.fun
 
-Static source bundle for the live `https://pango.fun` operator console.
+React Native + web source for the Pango-OS Hermes operator console.
+
+The app is built with Expo so the same source can run on Android and web. The
+production API remains the server-side pango.fun gateway at `https://pango.fun`.
 
 ## Contents
 
-- `index.html` - main Pango-OS Hermes console UI.
-- `login.html` - identity gate UI.
-- `manifest.webmanifest` - PWA manifest.
-- `sw.js` - service worker.
-- `assets/pango-icon.svg` - PWA/icon asset.
-- `dev-server.mjs` - local-only mock auth/API server for development.
+- `App.js` - Expo entry point.
+- `src/PangoApp.js` - app orchestration for auth, tabs, refresh, and chat stream.
+- `src/api/pangoApi.js` - API client and SSE stream handling.
+- `src/components/` - shared UI components.
+- `src/screens/` - Login, Chat, Observe, Tasks, and Config screens.
+- `src/utils/` - small parsing helpers.
+- `dev-server.mjs` - local-only mock/proxy server for development.
+- `index.html`, `login.html`, `manifest.webmanifest`, `sw.js` - legacy static bundle kept for current server deployments until the Expo web export replaces it.
 
-## Local development
-
-Do not open `index.html` directly. The app expects same-origin server routes
-under `/api/pango/*`, so a plain static server will make login fail.
-
-Run the local mock server:
+## Install
 
 ```bash
-npm run dev
+npm install
 ```
 
-Open:
+This project targets Expo SDK 55 because it supports the Node 20 runtime already
+used on this machine. Upgrade Expo only after updating Node and testing Android
+and web together.
+
+## Android Development
+
+Start Expo:
+
+```bash
+npm run android
+```
+
+Metro runs on port `8082` because `8081` is often already used on this machine.
+If Expo Go cannot reload from the LAN URL, use tunnel mode:
+
+```bash
+npm run android:tunnel
+```
+
+The Voice tab uses native Android speech recognition through
+`expo-speech-recognition`. Expo Go does not include that third-party native
+module, so real listening requires a development build:
+
+```bash
+npm run android:devbuild
+```
+
+After the dev build is installed, run Metro normally with:
+
+```bash
+npm run start:clear
+```
+
+By default the native app uses the production API:
 
 ```text
-http://127.0.0.1:4173
+https://pango.fun
 ```
 
-By default, local development accepts any non-empty username and password.
-To require a specific local credential, set:
+Use your production operator credential on the login screen. The app expects the
+gateway to set an HttpOnly cookie and return CSRF from `/api/pango/me`.
+
+To point Android at a different API base:
 
 ```bash
-PANGO_LOCAL_USER=operator PANGO_LOCAL_PASSWORD=local-password npm run dev
+EXPO_PUBLIC_PANGO_API_BASE=https://your-api-host.example npm run android
 ```
 
-The local server is a mock. It provides cookie auth, CSRF, status, sessions,
-chat streaming, tasks, config, approvals, and snapshot endpoints with in-memory
-data only. It does not connect to the production Hermes gateway.
+For an Android emulator talking to the local dev proxy, use:
 
-## Local UI with production VPS responses
+```bash
+EXPO_PUBLIC_PANGO_API_BASE=http://10.0.2.2:4173 npm run android
+```
 
-To run the local UI while using the production pango.fun API/Hermes bridge:
+## Web Development
+
+Start Expo web:
+
+```bash
+npm run web
+```
+
+If you need local web to talk to production pango.fun without CORS issues, run
+the local production proxy in a second terminal:
 
 ```bash
 npm run dev:prod
 ```
 
-Open:
-
-```text
-http://127.0.0.1:4173
-```
-
-Log in with the same operator credential used on `https://pango.fun`. The local
-server forwards `/api/pango/*` to `https://pango.fun`, keeps the production
-cookie in memory only, and gives the browser a separate local HttpOnly cookie.
-This makes chat/status/session/task responses come from the VPS while the static
-files are served from your local checkout.
-
-Equivalent explicit command:
+Then start Expo web with:
 
 ```bash
-PANGO_API_UPSTREAM=https://pango.fun npm run dev
+npm run web:prod
 ```
 
-Use this mode only on a trusted machine. It performs real authenticated
-production requests, so write actions still hit the VPS.
+The proxy forwards `/api/pango/*` to `https://pango.fun`, keeps upstream cookies
+in memory, and gives the local browser a separate dev cookie.
 
-## Backend contract
+Build static web output:
 
-This repository contains only browser-facing static files. Runtime routes such as
-`/api/pango/login`, `/api/pango/me`, `/api/pango/chat`, `/api/pango/tasks`,
-`/api/pango/config`, and `/api/pango/status` are expected to be provided by the
-server-side pango.fun gateway and Nginx auth layer.
+```bash
+npm run export:web
+```
+
+Deploy the generated web output to the pango.fun static root. On production web,
+the app can use same-origin `/api/pango/*` behind Nginx.
+
+## Local API Modes
+
+Mock local API:
+
+```bash
+npm run dev:mock
+```
+
+Production proxy API:
+
+```bash
+npm run dev:prod
+```
+
+Do not run `dev-server.mjs` as production. It is only for local development and
+testing.
+
+## Backend Contract
+
+Runtime routes are provided by the server-side pango.fun gateway and Nginx auth
+layer:
+
+- `POST /api/pango/login`
+- `GET /api/pango/me`
+- `POST /api/pango/chat/stream`
+- `GET /api/pango/status`
+- `GET /api/pango/sessions`
+- `GET /api/pango/tasks`
+- `GET /api/pango/config`
+- `/api/pango/ops/*`
+
+Production auth must use Secure HttpOnly cookies and CSRF via `X-Pango-CSRF` for
+mutating requests.
 
 Do not commit API keys, cookies, session files, `.env` files, Nginx configs,
-systemd units, gateway snapshots, or deployment backups to this repository.
+systemd units, gateway snapshots, deployment backups, or production credentials
+to this repository.

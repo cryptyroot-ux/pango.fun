@@ -84,6 +84,16 @@ function sendText(res, statusCode, body, headers = {}) {
   res.end(body);
 }
 
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin) return;
+  res.setHeader('access-control-allow-origin', origin);
+  res.setHeader('access-control-allow-credentials', 'true');
+  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('access-control-allow-headers', 'content-type,x-pango-csrf');
+  res.setHeader('vary', 'Origin');
+}
+
 function redirect(res, location) {
   res.writeHead(302, {
     location,
@@ -738,6 +748,12 @@ async function handleApi(req, res, url) {
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || `${host}:${port}`}`);
+    applyCors(req, res);
+    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/pango/')) {
+      res.writeHead(204, { 'cache-control': 'no-store' });
+      res.end();
+      return;
+    }
     if (url.pathname.startsWith('/api/pango/')) {
       await handleApi(req, res, url);
       return;

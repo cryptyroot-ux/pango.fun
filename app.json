@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Pango",
+    "slug": "pango-fun",
+    "version": "0.1.0",
+    "scheme": "pango",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/pango-icon.png",
+    "assetBundlePatterns": [
+      "assets/*"
+    ],
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Pango to listen for operator voice commands.",
+          "speechRecognitionPermission": "Allow Pango to transcribe operator voice commands.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
+    ],
+    "android": {
+      "package": "fun.pango.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/pango-icon.png",
+        "backgroundColor": "#060403"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/pango-icon.png"
+    },
+    "extra": {
+      "apiBase": "https://pango.fun"
+    }
+  }
+}
